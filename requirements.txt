@@ -2,5 +2,5 @@ pandas
 plotly
 scikit-learn
 xgboost
-streamlit
-altair>=5.0.0
+streamlit>=1.28.0
+altair==4.2.2
