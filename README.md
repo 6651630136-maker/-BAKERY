@@ -37,3 +37,20 @@ https://share.streamlit.io/6651630136-maker/-BAKERY/main/app.py
 Notes
 - If your CSV files are large, consider using Git LFS or hosting the data elsewhere to avoid slowing the repo.
 - If Streamlit fails to install dependencies, check `requirements.txt` for correct package names.
+
+### Authentication & extra dashboard
+
+The app now includes a simple **login/logout** form in the sidebar. Use credentials:
+
+```
+username: admin
+password: password
+```
+
+After logging in, you can choose **Dashboard** from the sidebar menu. The
+Dashboard page shows:
+
+* yearly sales table for each product
+* pie/donut chart of sales share per year for a selected product
+
+This new page is separate from the original filters/plots, which remain same.

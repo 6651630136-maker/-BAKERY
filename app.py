@@ -10,22 +10,69 @@ st.set_page_config(
     layout="wide"
 )
 
+# ----------------------
+# authentication helpers
+# ----------------------
+def login_form():
+    if 'logged_in' not in st.session_state:
+        st.session_state.logged_in = False
+        st.session_state.username = ''
+    with st.sidebar.form('login_form', clear_on_submit=False):
+        st.write('### 🔐 Login')
+        user = st.text_input('Username')
+        pwd = st.text_input('Password', type='password')
+        submitted = st.form_submit_button('Sign in')
+        if submitted:
+            # hard‑coded credentials for example
+            if user == 'admin' and pwd == 'password':
+                st.session_state.logged_in = True
+                st.session_state.username = user
+                st.sidebar.success(f'Logged in as {user}')
+            else:
+                st.sidebar.error('Invalid credentials')
+
+
+def logout():
+    if st.sidebar.button('Logout'):
+        st.session_state.logged_in = False
+        st.session_state.username = ''
+        st.experimental_rerun()
+
+
+# require login for dashboard pages
+
+def require_login():
+    if not st.session_state.get('logged_in', False):
+        login_form()
+        st.stop()
+
+
 # ======================
 # LOAD DATA
 # ======================
-historical = pd.read_csv("train.csv")
-forecast = pd.read_csv("monthly_forecast.csv")
+try:
+    historical = pd.read_csv("train.csv")
+    forecast = pd.read_csv("monthly_forecast.csv")
+except FileNotFoundError as e:
+    st.error(f"❌ CSV file not found: {e}")
+    st.stop()
 
 historical['Date'] = pd.to_datetime(historical['Date'], dayfirst=True)
 forecast['Date'] = pd.to_datetime(forecast['Date'])
 
+# ----------------------
+# page selector
+# ----------------------
+page = st.sidebar.selectbox('Go to', ['Main','Dashboard'])
+
+
 # ======================
 # MONTHLY AGGREGATION (HISTORICAL)
 # ======================
+historical['YearMonth'] = historical['Date'].dt.to_period('M').dt.to_timestamp()
 historical_monthly = (
     historical
-    .assign(Date=historical['Date'].dt.to_period('M').dt.to_timestamp())
-    .groupby(['ProductName', 'Date'])
+    .groupby(['ProductName', 'YearMonth'])
     .agg({
         'Sales': 'sum',
         'Cloud Coverage': 'mean',
@@ -35,6 +82,7 @@ historical_monthly = (
         'Festival': 'max'
     })
     .reset_index()
+    .rename(columns={'YearMonth': 'Date'})
 )
 
 # ======================
@@ -52,6 +100,36 @@ weather_monthly = (
     })
     .reset_index()
 )
+
+# ----------------------
+# handle pages
+# ----------------------
+if page == 'Dashboard':
+    require_login()
+    st.title('Dashboard')
+    # yearly sales by product
+    yearly = (
+        historical
+        .assign(Year=historical['Date'].dt.year)
+        .groupby(['Year','ProductName'])['Sales']
+        .sum()
+        .reset_index()
+    )
+    st.subheader('Annual Sales by Product')
+    st.dataframe(yearly)
+
+    st.subheader('Product share (pie/donut)')
+    prod = st.selectbox('Select product', yearly['ProductName'].unique())
+    pie_data = yearly[yearly['ProductName'] == prod][['Year','Sales']]
+    fig_pie = go.Figure(go.Pie(
+        labels=pie_data['Year'],
+        values=pie_data['Sales'],
+        hole=0.4
+    ))
+    st.plotly_chart(fig_pie, use_container_width=True)
+    # logout button
+    logout()
+    st.stop()
 
 # ======================
 # SIDEBAR FILTERS
