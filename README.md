@@ -52,3 +52,73 @@ Dashboard page shows:
 * pie/donut chart of sales share per year for a selected product
 
 This new page is separate from the original filters/plots, which remain same.
+
+---
+
+## Optional backend / OAuth example
+
+The `backend/` folder contains a minimal FastAPI application configured for
+GitHub OAuth. It is *not required* for the Streamlit front end but can be used
+to offload authentication or connect to a PostgreSQL database.
+
+### Running the backend locally
+
+1. Fill in `.env` with your GitHub app credentials and database URL.
+2. Install backend deps (same `requirements.txt` covers them) and run:
+
+   ```bash
+   uvicorn backend.app:app --reload
+   ```
+
+3. Visit `http://localhost:8000/login/github` to initiate GitHub login flow.
+
+The code stores OAuth tokens in memory (for demonstration only). You can
+modify `backend/app.py` to persist users in PostgreSQL using `psycopg2` or
+SQLAlchemy.
+
+### Using OAuth in Streamlit
+
+Modify `login_form()` in `app.py` to call your backend endpoint, e.g.: 
+
+```python
+import requests
+
+def authenticate(user, pwd):
+    r = requests.post('http://localhost:8000/authenticate', json={'user':user,'pwd':pwd})
+    return r.json().get('ok', False)
+```
+
+or load a token cookie returned by the backend and verify it locally.
+
+### PostgreSQL instead of SQLite
+
+Set `DATABASE_URL` in `.env` then replace SQLite functions with a connection
+helper:
+
+```python
+def get_conn():
+    return psycopg2.connect(os.environ['DATABASE_URL'])
+```
+
+Use this helper in `register_user()` and `authenticate()`.
+
+---
+
+## Theming and layout tips
+
+- Customize colors via CSS in `st.markdown` or a `config.toml` theme.
+- Use `st.columns()`/`st.expander()` for complex layouts.
+- For interactive tables, consider [`streamlit-aggrid`](https://github.com/PablocFonseca/streamlit-aggrid).
+
+---
+
+## Large files & Git LFS
+
+To track CSVs with Git LFS:
+
+```bash
+git lfs install
+git lfs track "*.csv"
+git add .gitattributes
+# re-add csvs so they go through LFS
+```

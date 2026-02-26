@@ -5,3 +5,8 @@ xgboost
 streamlit>=1.28.0
 altair==4.2.2
 bcrypt
+fastapi
+uvicorn[standard]
+psycopg2-binary
+python-dotenv
+authlib
