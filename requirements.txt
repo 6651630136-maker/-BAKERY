@@ -3,3 +3,4 @@ plotly
 scikit-learn
 xgboost
 streamlit
+altair>=5.0.0
