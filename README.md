@@ -40,12 +40,10 @@ Notes
 
 ### Authentication & extra dashboard
 
-The app now includes a simple **login/logout** form in the sidebar. Use credentials:
+The app now includes a simple **login/logout** form in the sidebar backed by a SQLite database. You can register a new account via the sidebar.
 
-```
-username: admin
-password: password
-```
+If you prefer a built-in demo user instead, the credentials `admin` / `password` will also work (this user is created automatically).
+
 
 After logging in, you can choose **Dashboard** from the sidebar menu. The
 Dashboard page shows:

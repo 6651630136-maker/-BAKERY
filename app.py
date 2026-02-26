@@ -10,9 +10,71 @@ st.set_page_config(
     layout="wide"
 )
 
+# basic styling tweaks
+st.markdown(
+    """
+    <style>
+    .sidebar .sidebar-content { background-color: #f7f7f8; }
+    .stButton>button { background-color:#4CAF50; color:white; }
+    .stTextInput>div>div>input { border-radius: 5px; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # ----------------------
-# authentication helpers
+# authentication helpers (database-backed)
 # ----------------------
+import sqlite3
+import bcrypt
+
+DB_PATH = 'users.db'
+
+# initialize user database file
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS users(
+            id INTEGER PRIMARY KEY,
+            username TEXT UNIQUE,
+            password_hash TEXT
+        )"""
+    )
+    conn.commit()
+    conn.close()
+
+# make sure DB file is created on startup
+init_db()
+
+
+def register_user(user: str, pwd: str) -> bool:
+    hashb = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode()
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        conn.execute(
+            "INSERT INTO users(username,password_hash) VALUES(?,?)",
+            (user, hashb),
+        )
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
+
+
+def authenticate(user: str, pwd: str) -> bool:
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute(
+        "SELECT password_hash FROM users WHERE username=?", (user,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        return False
+    return bcrypt.checkpw(pwd.encode(), row[0].encode())
+
+
 def login_form():
     if 'logged_in' not in st.session_state:
         st.session_state.logged_in = False
@@ -23,13 +85,25 @@ def login_form():
         pwd = st.text_input('Password', type='password')
         submitted = st.form_submit_button('Sign in')
         if submitted:
-            # hard‑coded credentials for example
-            if user == 'admin' and pwd == 'password':
+            if authenticate(user, pwd):
                 st.session_state.logged_in = True
                 st.session_state.username = user
                 st.sidebar.success(f'Logged in as {user}')
             else:
                 st.sidebar.error('Invalid credentials')
+
+
+def signup_form():
+    with st.sidebar.form('signup_form', clear_on_submit=True):
+        st.write('### 📝 Register')
+        user = st.text_input('Choose username')
+        pwd = st.text_input('Choose password', type='password')
+        submitted = st.form_submit_button('Sign up')
+        if submitted:
+            if register_user(user, pwd):
+                st.sidebar.success('Account created. Please log in.')
+            else:
+                st.sidebar.error('Username already exists')
 
 
 def logout():
@@ -43,6 +117,7 @@ def logout():
 
 def require_login():
     if not st.session_state.get('logged_in', False):
+        signup_form()
         login_form()
         st.stop()
 
