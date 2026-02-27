@@ -216,32 +216,62 @@ if page == 'Main':
         (weather_monthly['Date'] <= pd.Timestamp(end_month))
     ]
 
-    # ===== Tabs =====
-    tab1, tab2 = st.tabs(["📊 Sales: Historical vs Forecast", "🌦 Weather vs Sales"])
+    # --- Tabs ---
+tab1, tab2 = st.tabs(["📊 Sales: Historical vs Forecast", "🌦 Weather vs Sales"])
 
-    # --- Tab 1: Sales ---
-    with tab1:
-        st.subheader("📈 Monthly Sales Comparison")
-        fig = go.Figure()
-        for p in selected_products:
-            hist_p = hist_f[hist_f['ProductName'] == p]
-            fore_p = fore_f[fore_f['Product'] == p]
-            fig.add_trace(go.Scatter(x=hist_p['Date'], y=hist_p['Sales'], mode='lines+markers', name=f"{p} (Historical)"))
-            fig.add_trace(go.Scatter(x=fore_p['Date'], y=fore_p['Predicted_Sales'], mode='lines+markers', name=f"{p} (Forecast)", line=dict(dash='dash')))
-        st.plotly_chart(fig, use_container_width=True)
+# --- Tab 1: Sales ---
+with tab1:
+    st.subheader("📈 Monthly Sales Comparison")
+    fig = go.Figure()
+    for p in selected_products:
+        hist_p = hist_f[hist_f['ProductName'] == p]
+        fore_p = fore_f[fore_f['Product'] == p]
+        fig.add_trace(go.Scatter(x=hist_p['Date'], y=hist_p['Sales'], mode='lines+markers', name=f"{p} (Historical)"))
+        fig.add_trace(go.Scatter(x=fore_p['Date'], y=fore_p['Predicted_Sales'], mode='lines+markers', name=f"{p} (Forecast)", line=dict(dash='dash')))
+    st.plotly_chart(fig, use_container_width=True)
 
-    # --- Tab 2: Weather ---
-    with tab2:
-        st.subheader("🌦 Weather Factors vs Sales (Global Monthly)")
-        weather_feature = st.selectbox("Select Weather Variable", ["Cloud Coverage", "Temperature", "Wind Speed", "Weather Code", "Festival"])
-        sales_monthly = hist_f.groupby('Date')['Sales'].sum().reset_index()
-        fig2 = go.Figure()
-        fig2.add_trace(go.Bar(x=sales_monthly['Date'], y=sales_monthly['Sales'], name="Total Sales", opacity=0.6))
-        fig2.add_trace(
-    go.Scatter(
-        x=weather_f['Date'],
-        y=weather_f[weather_feature],
-        name=weather_feature
-    )
+# --- Sidebar Filter for Weather ---
+st.sidebar.header("🌦 Weather vs Sales Filters")
+
+weather_feature = st.sidebar.selectbox(
+    "เลือก Weather Feature",
+    options=[col for col in weather_f.columns if col not in ['Date','Sales']]
 )
 
+start_date = st.sidebar.date_input("Start Date", weather_f['Date'].min())
+end_date = st.sidebar.date_input("End Date", weather_f['Date'].max())
+
+filtered_df = weather_f[
+    (weather_f['Date'] >= pd.to_datetime(start_date)) &
+    (weather_f['Date'] <= pd.to_datetime(end_date))
+]
+
+# --- Tab 2: Weather ---
+with tab2:
+    st.subheader("🌦 Weather Factors vs Sales (Global Monthly)")
+
+    # แสดงข้อมูลที่กรองแล้ว
+    st.write(filtered_df)
+
+    # รวมยอดขายรายเดือนจาก hist_f
+    sales_monthly = hist_f.groupby('Date')['Sales'].sum().reset_index()
+
+    fig2 = go.Figure()
+    fig2.add_trace(go.Bar(x=sales_monthly['Date'], y=sales_monthly['Sales'], name="Total Sales", opacity=0.6))
+    fig2.add_trace(
+        go.Scatter(
+            x=filtered_df['Date'],
+            y=filtered_df[weather_feature],
+            name=weather_feature
+        )
+    )
+
+    fig2.update_layout(
+        title="Weather vs Sales",
+        xaxis_title="Date",
+        yaxis_title="Value",
+        legend_title="Feature",
+        template="plotly_white"
+    )
+
+    st.plotly_chart(fig2, use_container_width=True)
