@@ -151,9 +151,11 @@ if page == 'Dashboard':
     # ===== Sidebar Filters =====
     st.sidebar.header("📊 Dashboard Filters")
 
+    # เลือก Product
     products = sorted(historical['ProductName'].unique())
     selected_products = st.sidebar.multiselect("Select Product", products, default=products)
 
+    # เลือกช่วงปี
     years = sorted(historical['Date'].dt.year.unique())
     start_year, end_year = st.sidebar.select_slider(
         "Select Year Range",
@@ -204,6 +206,7 @@ if page == 'Dashboard':
         st.plotly_chart(fig_quarter, use_container_width=True)
 
     logout()
+
 
 
 # ======================
