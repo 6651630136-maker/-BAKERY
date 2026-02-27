@@ -103,6 +103,40 @@ historical['Date'] = pd.to_datetime(historical['Date'], dayfirst=True)
 forecast['Date'] = pd.to_datetime(forecast['Date'])
 
 # ======================
+# MONTHLY AGGREGATION (HISTORICAL)
+# ======================
+historical_monthly = (
+    historical
+    .assign(Date=historical['Date'].dt.to_period('M').dt.to_timestamp())
+    .groupby(['ProductName', 'Date'])
+    .agg({
+        'Sales': 'sum',
+        'Cloud Coverage': 'mean',
+        'Temperature': 'mean',
+        'Wind Speed': 'mean',
+        'Weather Code': 'mean',
+        'Festival': 'max'
+    })
+    .reset_index()
+)
+
+# ======================
+# GLOBAL MONTHLY WEATHER
+# ======================
+weather_monthly = (
+    historical_monthly
+    .groupby('Date')
+    .agg({
+        'Cloud Coverage': 'mean',
+        'Temperature': 'mean',
+        'Wind Speed': 'mean',
+        'Weather Code': 'mean',
+        'Festival': 'max'
+    })
+    .reset_index()
+)
+
+# ======================
 # PAGE SELECTOR
 # ======================
 page = st.sidebar.selectbox('Go to', ['Main','Dashboard'])
@@ -114,7 +148,6 @@ if page == 'Dashboard':
     require_login()
     st.title('📊 Dashboard')
 
-    # Pivot Table
     yearly = (
         historical
         .assign(Year=historical['Date'].dt.year)
@@ -126,14 +159,12 @@ if page == 'Dashboard':
     pivot = pd.pivot_table(yearly, values='Sales', index='Year', columns='ProductName', aggfunc='sum')
     st.dataframe(pivot)
 
-    # Donut Pie
     st.subheader('Product share (Donut Pie)')
     prod = st.selectbox('Select product', yearly['ProductName'].unique())
     pie_data = yearly[yearly['ProductName'] == prod][['Year','Sales']]
     fig_pie = go.Figure(go.Pie(labels=pie_data['Year'], values=pie_data['Sales'], hole=0.4))
     st.plotly_chart(fig_pie, use_container_width=True)
 
-    # Quarterly Chart
     st.subheader('Quarterly Sales Trend')
     quarterly = (
         historical
@@ -149,7 +180,7 @@ if page == 'Dashboard':
     logout()
 
 # ======================
-# MAIN PAGE (FORECAST + FILTERS + TABS)
+# MAIN PAGE (FILTERS + TABS + FORECAST CHART)
 # ======================
 if page == 'Main':
     st.title("🏠 Sales Forecast Dashboard")
@@ -165,7 +196,7 @@ if page == 'Main':
     )
 
     all_dates = pd.concat([
-        historical['Date'],
+        historical_monthly['Date'],
         forecast['Date']
     ]).sort_values()
 
@@ -178,16 +209,21 @@ if page == 'Main':
     )
 
     # ===== Filter Data =====
-    hist_f = historical[
-        (historical['ProductName'].isin(selected_products)) &
-        (historical['Date'] >= pd.Timestamp(start_month)) &
-        (historical['Date'] <= pd.Timestamp(end_month))
+    hist_f = historical_monthly[
+        (historical_monthly['ProductName'].isin(selected_products)) &
+        (historical_monthly['Date'] >= pd.Timestamp(start_month)) &
+        (historical_monthly['Date'] <= pd.Timestamp(end_month))
     ]
 
     fore_f = forecast[
         (forecast['Product'].isin(selected_products)) &
         (forecast['Date'] >= pd.Timestamp(start_month)) &
         (forecast['Date'] <= pd.Timestamp(end_month))
+    ]
+
+    weather_f = weather_monthly[
+        (weather_monthly['Date'] >= pd.Timestamp(start_month)) &
+        (weather_monthly['Date'] <= pd.Timestamp(end_month))
     ]
 
     # ===== Tabs =====
@@ -200,84 +236,18 @@ if page == 'Main':
     with tab1:
         st.subheader("📈 Monthly Sales Comparison")
         fig = go.Figure()
-
         for p in selected_products:
             hist_p = hist_f[hist_f['ProductName'] == p]
             fore_p = fore_f[fore_f['Product'] == p]
-
-            fig.add_trace(go.Scatter(
-                x=hist_p['Date'],
-                y=hist_p['Sales'],
-                mode='lines+markers',
-                name=f"{p} (Historical)"
-            ))
-
-            fig.add_trace(go.Scatter(
-                x=fore_p['Date'],
-                y=fore_p['Predicted_Sales'],
-                mode='lines+markers',
-                name=f"{p} (Forecast)",
-                line=dict(dash='dash')
-            ))
-
-        fig.update_layout(xaxis_title="Month", yaxis_title="Sales", legend_title="Product")
+            fig.add_trace(go.Scatter(x=hist_p['Date'], y=hist_p['Sales'], mode='lines+markers', name=f"{p} (Historical)"))
+            fig.add_trace(go.Scatter(x=fore_p['Date'], y=fore_p['Predicted_Sales'], mode='lines+markers', name=f"{p} (Forecast)", line=dict(dash='dash')))
         st.plotly_chart(fig, use_container_width=True)
 
     # --- Tab 2: Weather ---
     with tab2:
-        st.subheader("🌦 Weather Factors vs Sales")
-
-        weather_feature = st.selectbox(
-            "Select Weather Variable",
-            ["Cloud Coverage", "Temperature", "Wind Speed", "Weather Code", "Festival"]
-        )
-
-        # Total Sales ต่อเดือน
-        sales_monthly = (
-            hist_f.groupby('Date')['Sales'].sum().reset_index()
-        )
-
+        st.subheader("🌦 Weather Factors vs Sales (Global Monthly)")
+        weather_feature = st.selectbox("Select Weather Variable", ["Cloud Coverage", "Temperature", "Wind Speed", "Weather Code", "Festival"])
+        sales_monthly = hist_f.groupby('Date')['Sales'].sum().reset_index()
         fig2 = go.Figure()
-        fig2.add_trace(go.Bar(
-            x=sales_monthly['Date'],
-            y=sales_monthly['Sales'],
-            name="Total Sales",
-            opacity=0.6
-        ))
-
-        # Weather line
-        weather_monthly = (
-            historical.groupby(historical['Date'].dt.to_period('M').dt.to_timestamp())
-            .agg({
-                'Cloud Coverage': 'mean',
-                'Temperature': 'mean',
-                'Wind Speed': 'mean',
-                'Weather Code': 'mean',
-                'Festival': 'max'
-            })
-            .reset_index()
-            .rename(columns={'Date':'Month'})
-        )
-
-        weather_f = weather_monthly[
-            (weather_monthly['Month'] >= pd.Timestamp(start_month)) &
-            (weather_monthly['Month'] <= pd.Timestamp(end_month))
-        ]
-
-        fig2.add_trace(go.Scatter(
-            x=weather_f['Month'],
-            y=weather_f[weather_feature],
-            name=weather_feature,
-            yaxis="y2",
-            mode="lines+markers",
-            line=dict(width=3)
-        ))
-
-        fig2.update_layout(
-            xaxis_title="Month",
-            yaxis=dict(title="Sales"),
-            yaxis2=dict(title=weather_feature, overlaying="y", side="right"),
-            legend=dict(x=0.01, y=0.99)
-        )
-
-        st.plotly_chart(fig2, use_container_width=True)
+        fig2.add_trace(go.Bar(x=sales_monthly['Date'], y=sales_monthly['Sales'], name="Total Sales", opacity=0.6))
+        fig2.add_trace(go.Scatter(x
