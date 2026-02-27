@@ -1,6 +1,10 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+import sqlite3
+import bcrypt
+import os
+import requests
 
 # ======================
 # PAGE CONFIG
@@ -14,23 +18,20 @@ st.set_page_config(
 st.markdown(
     """
     <style>
+    body {background-color: #fafafa;}
     .sidebar .sidebar-content { background-color: #f7f7f8; }
     .stButton>button { background-color:#4CAF50; color:white; }
     .stTextInput>div>div>input { border-radius: 5px; }
+    .stTabs [role="tab"] { color: #333; font-weight:500; }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-# ----------------------
-# authentication helpers (database-backed)
-# ----------------------
-import sqlite3
-import bcrypt
-
+# ======================
+# AUTHENTICATION HELPERS
+# ======================
 DB_PATH = 'users.db'
-
-# initialize user database file
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -44,9 +45,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-# make sure DB file is created on startup
 init_db()
-
 
 def register_user(user: str, pwd: str) -> bool:
     hashb = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode()
@@ -63,7 +62,6 @@ def register_user(user: str, pwd: str) -> bool:
     finally:
         conn.close()
 
-
 def authenticate(user: str, pwd: str) -> bool:
     conn = sqlite3.connect(DB_PATH)
     row = conn.execute(
@@ -74,6 +72,19 @@ def authenticate(user: str, pwd: str) -> bool:
         return False
     return bcrypt.checkpw(pwd.encode(), row[0].encode())
 
+def logout():
+    if st.sidebar.button('Logout'):
+        st.session_state.logged_in = False
+        st.session_state.username = ''
+        st.session_state.github_logged_in = False
+        st.session_state.github_user = ''
+        st.rerun()
+
+def require_login():
+    if not st.session_state.get('logged_in', False) and not st.session_state.get('github_logged_in', False):
+        signup_form()
+        login_form()
+        st.stop()
 
 def login_form():
     if 'logged_in' not in st.session_state:
@@ -92,6 +103,11 @@ def login_form():
             else:
                 st.sidebar.error('Invalid credentials')
 
+    st.sidebar.markdown('---')
+    if not st.session_state.get('github_logged_in'):
+        github_oauth_button()
+    else:
+        st.sidebar.success(f"Logged in via GitHub: {st.session_state.github_user}")
 
 def signup_form():
     with st.sidebar.form('signup_form', clear_on_submit=True):
@@ -105,22 +121,47 @@ def signup_form():
             else:
                 st.sidebar.error('Username already exists')
 
+# ======================
+# GITHUB OAUTH
+# ======================
+def github_oauth_button():
+    CLIENT_ID = os.getenv('GITHUB_CLIENT_ID','')
+    CLIENT_SECRET = os.getenv('GITHUB_CLIENT_SECRET','')
+    redirect_uri = st.query_params.get('redirect_uri', '')
 
-def logout():
-    if st.sidebar.button('Logout'):
-        st.session_state.logged_in = False
-        st.session_state.username = ''
-        st.rerun()   # ใช้ st.rerun() แทน st.experimental_rerun()
+    params = {
+        'client_id': CLIENT_ID,
+        'scope': 'read:user user:email',
+        'allow_signup': 'true',
+        'redirect_uri': redirect_uri,
+    }
+    auth_url = 'https://github.com/login/oauth/authorize'
+    st.sidebar.markdown(f"[Login with GitHub]({auth_url}?" + '&'.join(f"{k}={v}" for k,v in params.items()) + ")")
 
-
-# require login for dashboard pages
-
-def require_login():
-    if not st.session_state.get('logged_in', False):
-        signup_form()
-        login_form()
-        st.stop()
-
+    qp = st.query_params
+    if 'code' in qp:
+        code = qp['code'][0] if isinstance(qp['code'], list) else qp['code']
+        token_resp = requests.post(
+            'https://github.com/login/oauth/access_token',
+            headers={'Accept':'application/json'},
+            data={
+                'client_id': CLIENT_ID,
+                'client_secret': CLIENT_SECRET,
+                'code': code
+            }
+        )
+        data = token_resp.json()
+        if 'access_token' in data:
+            token = data['access_token']
+            user_resp = requests.get('https://api.github.com/user',
+                                     headers={'Authorization': f'token {token}'})
+            user = user_resp.json()
+            st.session_state.github_logged_in = True
+            st.session_state.github_user = user.get('login')
+            st.sidebar.success(f"GitHub: {user.get('login')}")
+            st.query_params.clear()
+        else:
+            st.sidebar.error('GitHub login failed')
 
 # ======================
 # LOAD DATA
@@ -135,14 +176,13 @@ except FileNotFoundError as e:
 historical['Date'] = pd.to_datetime(historical['Date'], dayfirst=True)
 forecast['Date'] = pd.to_datetime(forecast['Date'])
 
-# ----------------------
-# page selector
-# ----------------------
+# ======================
+# PAGE SELECTOR
+# ======================
 page = st.sidebar.selectbox('Go to', ['Main','Dashboard'])
 
-
 # ======================
-# MONTHLY AGGREGATION (HISTORICAL)
+# AGGREGATION
 # ======================
 historical['YearMonth'] = historical['Date'].dt.to_period('M').dt.to_timestamp()
 historical_monthly = (
@@ -160,9 +200,6 @@ historical_monthly = (
     .rename(columns={'YearMonth': 'Date'})
 )
 
-# ======================
-# GLOBAL MONTHLY WEATHER
-# ======================
 weather_monthly = (
     historical_monthly
     .groupby('Date')
@@ -176,196 +213,13 @@ weather_monthly = (
     .reset_index()
 )
 
-# ----------------------
-# handle pages
-# ----------------------
-if page == 'Dashboard':
-    require_login()
-    st.title('Dashboard')
-    # yearly sales by product
-    yearly = (
-        historical
-        .assign(Year=historical['Date'].dt.year)
-        .groupby(['Year','ProductName'])['Sales']
-        .sum()
-        .reset_index()
-    )
-    st.subheader('Annual Sales by Product')
-    st.dataframe(yearly)
-
-    st.subheader('Product share (pie/donut)')
-    prod = st.selectbox('Select product', yearly['ProductName'].unique())
-    pie_data = yearly[yearly['ProductName'] == prod][['Year','Sales']]
-    fig_pie = go.Figure(go.Pie(
-        labels=pie_data['Year'],
-        values=pie_data['Sales'],
-        hole=0.4
-    ))
-    st.plotly_chart(fig_pie, use_container_width=True)
-    # logout button
-    logout()
-    st.stop()
-
 # ======================
-# SIDEBAR FILTERS
+# DASHBOARD PAGE
 # ======================
-st.sidebar.header("🧭 Filters")
-
-products = sorted(forecast['Product'].unique())
-selected_products = st.sidebar.multiselect(
-    "Select Product",
-    products,
-    default=products
-)
-
-all_dates = pd.concat([
-    historical_monthly['Date'],
-    forecast['Date']
-]).sort_values()
-
-start_month, end_month = st.sidebar.slider(
-    "Select Month Range",
-    min_value=all_dates.min().to_pydatetime(),
-    max_value=all_dates.max().to_pydatetime(),
-    value=(
-        all_dates.min().to_pydatetime(),
-        all_dates.max().to_pydatetime()
-    ),
-    format="YYYY-MM"
-)
-
-# ======================
-# FILTER DATA
-# ======================
-hist_f = historical_monthly[
-    (historical_monthly['ProductName'].isin(selected_products)) &
-    (historical_monthly['Date'] >= pd.Timestamp(start_month)) &
-    (historical_monthly['Date'] <= pd.Timestamp(end_month))
-]
-
-fore_f = forecast[
-    (forecast['Product'].isin(selected_products)) &
-    (forecast['Date'] >= pd.Timestamp(start_month)) &
-    (forecast['Date'] <= pd.Timestamp(end_month))
-]
-
-weather_f = weather_monthly[
-    (weather_monthly['Date'] >= pd.Timestamp(start_month)) &
-    (weather_monthly['Date'] <= pd.Timestamp(end_month))
-]
-
-# ======================
-# TABS
-# ======================
-tab1, tab2 = st.tabs([
-    "📊 Sales: Historical vs Forecast",
-    "🌦 Weather vs Sales"
-])
-
-# ======================================================
-# TAB 1 : SALES
-# ======================================================
-with tab1:
-    st.subheader("📈 Monthly Sales Comparison")
-
-    fig = go.Figure()
-
-    for p in selected_products:
-        hist_p = hist_f[hist_f['ProductName'] == p]
-        fore_p = fore_f[fore_f['Product'] == p]
-
-        fig.add_trace(go.Scatter(
-            x=hist_p['Date'],
-            y=hist_p['Sales'],
-            mode='lines+markers',
-            name=f"{p} (Historical)"
-        ))
-
-        fig.add_trace(go.Scatter(
-            x=fore_p['Date'],
-            y=fore_p['Predicted_Sales'],
-            mode='lines+markers',
-            name=f"{p} (Forecast)",
-            line=dict(dash='dash')
-        ))
-
-    fig.update_layout(
-        xaxis_title="Month",
-        yaxis_title="Sales",
-        legend_title="Product"
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-# ======================================================
-# TAB 2 : WEATHER vs SALES
-# ======================================================
-with tab2:
-    st.subheader("🌦 Weather Factors vs Sales (Global Monthly)")
-
-    weather_feature = st.selectbox(
-        "Select Weather Variable",
-        [
-            "Cloud Coverage",
-            "Temperature",
-            "Wind Speed",
-            "Weather Code",
-            "Festival"
-        ]
-    )
-
-    # Total Sales ต่อเดือน (ทุก Product)
-    sales_monthly = (
-        hist_f
-        .groupby('Date')['Sales']
-        .sum()
-        .reset_index()
-    )
-
-    fig2 = go.Figure()
-
-    # Sales
-    fig2.add_trace(go.Bar(
-        x=sales_monthly['Date'],
-        y=sales_monthly['Sales'],
-        name="Total Sales",
-        opacity=0.6
-    ))
-
-    # Weather (single global line)
-    fig2.add_trace(go.Scatter(
-        x=weather_f['Date'],
-        y=weather_f[weather_feature],
-        name=weather_feature,
-        yaxis="y2",
-        mode="lines+markers",
-        line=dict(width=3)
-    ))
-
-    fig2.update_layout(
-        xaxis_title="Month",
-        yaxis=dict(title="Sales"),
-        yaxis2=dict(
-            title=weather_feature,
-            overlaying="y",
-            side="right"
-        ),
-        legend=dict(x=0.01, y=0.99)
-    )
-
-    st.plotly_chart(fig2, use_container_width=True)
-
-# ======================
-# FOOTER
-# ======================
-st.caption(
-    "Weather variables are treated as global exogenous factors aggregated monthly."
-)
 if page == 'Dashboard':
     require_login()
     st.title('Dashboard')
 
-    # Annual Sales Pivot Table
     yearly = (
         historical
         .assign(Year=historical['Date'].dt.year)
@@ -377,7 +231,6 @@ if page == 'Dashboard':
     pivot = pd.pivot_table(yearly, values='Sales', index='Year', columns='ProductName', aggfunc='sum')
     st.dataframe(pivot)
 
-    # Donut Pie Chart
     st.subheader('Product share (Donut Pie)')
     prod = st.selectbox('Select product', yearly['ProductName'].unique())
     pie_data = yearly[yearly['ProductName'] == prod][['Year','Sales']]
@@ -388,7 +241,6 @@ if page == 'Dashboard':
     ))
     st.plotly_chart(fig_pie, use_container_width=True)
 
-    # Quarterly Sales Chart
     st.subheader('Quarterly Sales Trend')
     quarterly = (
         historical
@@ -405,8 +257,5 @@ if page == 'Dashboard':
     fig_quarter.update_layout(xaxis_title="Quarter", yaxis_title="Sales")
     st.plotly_chart(fig_quarter, use_container_width=True)
 
-    # ======================
-    # Logout Button
-    # ======================
     logout()
     st.stop()
