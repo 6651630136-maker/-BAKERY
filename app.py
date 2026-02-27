@@ -237,4 +237,4 @@ if page == 'Main':
         sales_monthly = hist_f.groupby('Date')['Sales'].sum().reset_index()
         fig2 = go.Figure()
         fig2.add_trace(go.Bar(x=sales_monthly['Date'], y=sales_monthly['Sales'], name="Total Sales", opacity=0.6))
-        fig2.add_trace(go.Scatter(x=weather_f['Date'], y=weather_f[weather_feature], name=weather_feature, yaxis="y2", mode="lines+markers", line=dict(width=3)))
+        fig2.add_trace(go.Scatter(x=weather_f['Date'], y=weather_f[weather_feature], name=weather_feature,
