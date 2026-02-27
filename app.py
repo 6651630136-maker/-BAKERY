@@ -189,17 +189,9 @@ if page == 'Main':
     st.sidebar.header("🧭 Filters")
 
     products = sorted(forecast['Product'].unique())
-    selected_products = st.sidebar.multiselect(
-        "Select Product",
-        products,
-        default=products
-    )
+    selected_products = st.sidebar.multiselect("Select Product", products, default=products)
 
-    all_dates = pd.concat([
-        historical_monthly['Date'],
-        forecast['Date']
-    ]).sort_values()
-
+    all_dates = pd.concat([historical_monthly['Date'], forecast['Date']]).sort_values()
     start_month, end_month = st.sidebar.slider(
         "Select Month Range",
         min_value=all_dates.min().to_pydatetime(),
@@ -214,23 +206,18 @@ if page == 'Main':
         (historical_monthly['Date'] >= pd.Timestamp(start_month)) &
         (historical_monthly['Date'] <= pd.Timestamp(end_month))
     ]
-
     fore_f = forecast[
         (forecast['Product'].isin(selected_products)) &
         (forecast['Date'] >= pd.Timestamp(start_month)) &
         (forecast['Date'] <= pd.Timestamp(end_month))
     ]
-
     weather_f = weather_monthly[
         (weather_monthly['Date'] >= pd.Timestamp(start_month)) &
         (weather_monthly['Date'] <= pd.Timestamp(end_month))
     ]
 
     # ===== Tabs =====
-    tab1, tab2 = st.tabs([
-        "📊 Sales: Historical vs Forecast",
-        "🌦 Weather vs Sales"
-    ])
+    tab1, tab2 = st.tabs(["📊 Sales: Historical vs Forecast", "🌦 Weather vs Sales"])
 
     # --- Tab 1: Sales ---
     with tab1:
@@ -250,4 +237,5 @@ if page == 'Main':
         sales_monthly = hist_f.groupby('Date')['Sales'].sum().reset_index()
         fig2 = go.Figure()
         fig2.add_trace(go.Bar(x=sales_monthly['Date'], y=sales_monthly['Sales'], name="Total Sales", opacity=0.6))
-        fig2.add_trace(go.Scatter(x
+        fig2.add_trace(go.Scatter(x=weather_f['Date'], y=weather_f[weather_feature], name=weather_feature, yaxis="y2", mode="lines+markers", line=dict(width=3)))
+        fig2.update_layout(xaxis_title="Month", yaxis=dict(title="Sales"), yaxis2=dict(title=weather_feature, overlaying="y", side="
