@@ -148,34 +148,53 @@ if page == 'Dashboard':
     require_login()
     st.title('📊 Dashboard')
 
-    # ตรวจสอบข้อมูลก่อน
-    st.write("Historical head:", historical.head())
-    st.write("Columns:", historical.columns)
+    # ===== Sidebar Filters =====
+    st.sidebar.header("📊 Dashboard Filters")
 
-    yearly = (
-        historical
-        .assign(Year=historical['Date'].dt.year)
-        .groupby(['Year','ProductName'])['Sales']
-        .sum()
-        .reset_index()
+    products = sorted(historical['ProductName'].unique())
+    selected_products = st.sidebar.multiselect("Select Product", products, default=products)
+
+    years = sorted(historical['Date'].dt.year.unique())
+    start_year, end_year = st.sidebar.select_slider(
+        "Select Year Range",
+        options=years,
+        value=(years[0], years[-1])
     )
-    if yearly.empty:
+
+    # ===== Filter Data =====
+    hist_dash = historical[
+        (historical['ProductName'].isin(selected_products)) &
+        (historical['Date'].dt.year >= start_year) &
+        (historical['Date'].dt.year <= end_year)
+    ]
+
+    if hist_dash.empty:
         st.warning("⚠️ ไม่มีข้อมูลใน train.csv หรือคอลัมน์ไม่ตรง")
     else:
+        # Pivot Table
         st.subheader('Annual Sales by Product (Pivot Table)')
+        yearly = (
+            hist_dash
+            .assign(Year=hist_dash['Date'].dt.year)
+            .groupby(['Year','ProductName'])['Sales']
+            .sum()
+            .reset_index()
+        )
         pivot = pd.pivot_table(yearly, values='Sales', index='Year', columns='ProductName', aggfunc='sum')
         st.dataframe(pivot)
 
+        # Donut Pie
         st.subheader('Product share (Donut Pie)')
         prod = st.selectbox('Select product', yearly['ProductName'].unique())
         pie_data = yearly[yearly['ProductName'] == prod][['Year','Sales']]
         fig_pie = go.Figure(go.Pie(labels=pie_data['Year'], values=pie_data['Sales'], hole=0.4))
         st.plotly_chart(fig_pie, use_container_width=True)
 
+        # Quarterly Sales Trend
         st.subheader('Quarterly Sales Trend')
         quarterly = (
-            historical
-            .assign(Quarter=historical['Date'].dt.to_period('Q').dt.strftime("Q%q-%Y"))
+            hist_dash
+            .assign(Quarter=hist_dash['Date'].dt.to_period('Q').dt.strftime("Q%q-%Y"))
             .groupby(['Quarter'])['Sales']
             .sum()
             .reset_index()
@@ -185,6 +204,7 @@ if page == 'Dashboard':
         st.plotly_chart(fig_quarter, use_container_width=True)
 
     logout()
+
 
 # ======================
 # MAIN PAGE (FILTERS + TABS + FORECAST CHART)
