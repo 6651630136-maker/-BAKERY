@@ -187,7 +187,7 @@ page = st.sidebar.selectbox('Go to', ['Main','Dashboard'])
 historical['YearMonth'] = historical['Date'].dt.to_period('M').dt.to_timestamp()
 historical_monthly = (
     historical
-    .groupby(['ProductName', 'YearMonth'])
+    .groupby(['Product', 'YearMonth'])   # ใช้ Product ถ้าไฟล์คุณไม่มี ProductName
     .agg({
         'Sales': 'sum',
         'Cloud Coverage': 'mean',
@@ -224,18 +224,18 @@ if page == 'Dashboard':
     yearly = (
         historical
         .assign(Year=historical['Date'].dt.year)
-        .groupby(['Year','ProductName'])['Sales']
+        .groupby(['Year','Product'])['Sales']
         .sum()
         .reset_index()
     )
     st.subheader('Annual Sales by Product (Pivot Table)')
-    pivot = pd.pivot_table(yearly, values='Sales', index='Year', columns='ProductName', aggfunc='sum')
+    pivot = pd.pivot_table(yearly, values='Sales', index='Year', columns='Product', aggfunc='sum')
     st.dataframe(pivot)
 
     # Donut Pie
     st.subheader('Product share (Donut Pie)')
-    prod = st.selectbox('Select product', yearly['ProductName'].unique())
-    pie_data = yearly[yearly['ProductName'] == prod][['Year','Sales']]
+    prod = st.selectbox('Select product', yearly['Product'].unique())
+    pie_data = yearly[yearly['Product'] == prod][['Year','Sales']]
     fig_pie = go.Figure(go.Pie(labels=pie_data['Year'], values=pie_data['Sales'], hole=0.4))
     st.plotly_chart(fig_pie, use_container_width=True)
 
