@@ -14,20 +14,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# basic styling tweaks
-st.markdown(
-    """
-    <style>
-    body {background-color: #fafafa;}
-    .sidebar .sidebar-content { background-color: #f7f7f8; }
-    .stButton>button { background-color:#4CAF50; color:white; }
-    .stTextInput>div>div>input { border-radius: 5px; }
-    .stTabs [role="tab"] { color: #333; font-weight:500; }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
 # ======================
 # AUTHENTICATION HELPERS
 # ======================
@@ -182,38 +168,6 @@ forecast['Date'] = pd.to_datetime(forecast['Date'])
 page = st.sidebar.selectbox('Go to', ['Main','Dashboard'])
 
 # ======================
-# AGGREGATION
-# ======================
-historical['YearMonth'] = historical['Date'].dt.to_period('M').dt.to_timestamp()
-historical_monthly = (
-    historical
-    .groupby(['Product', 'YearMonth'])   # ใช้ Product ถ้าไฟล์คุณไม่มี ProductName
-    .agg({
-        'Sales': 'sum',
-        'Cloud Coverage': 'mean',
-        'Temperature': 'mean',
-        'Wind Speed': 'mean',
-        'Weather Code': 'mean',
-        'Festival': 'max'
-    })
-    .reset_index()
-    .rename(columns={'YearMonth': 'Date'})
-)
-
-weather_monthly = (
-    historical_monthly
-    .groupby('Date')
-    .agg({
-        'Cloud Coverage': 'mean',
-        'Temperature': 'mean',
-        'Wind Speed': 'mean',
-        'Weather Code': 'mean',
-        'Festival': 'max'
-    })
-    .reset_index()
-)
-
-# ======================
 # DASHBOARD PAGE
 # ======================
 if page == 'Dashboard':
@@ -224,18 +178,18 @@ if page == 'Dashboard':
     yearly = (
         historical
         .assign(Year=historical['Date'].dt.year)
-        .groupby(['Year','Product'])['Sales']
+        .groupby(['Year','ProductName'])['Sales']
         .sum()
         .reset_index()
     )
     st.subheader('Annual Sales by Product (Pivot Table)')
-    pivot = pd.pivot_table(yearly, values='Sales', index='Year', columns='Product', aggfunc='sum')
+    pivot = pd.pivot_table(yearly, values='Sales', index='Year', columns='ProductName', aggfunc='sum')
     st.dataframe(pivot)
 
     # Donut Pie
     st.subheader('Product share (Donut Pie)')
-    prod = st.selectbox('Select product', yearly['Product'].unique())
-    pie_data = yearly[yearly['Product'] == prod][['Year','Sales']]
+    prod = st.selectbox('Select product', yearly['ProductName'].unique())
+    pie_data = yearly[yearly['ProductName'] == prod][['Year','Sales']]
     fig_pie = go.Figure(go.Pie(labels=pie_data['Year'], values=pie_data['Sales'], hole=0.4))
     st.plotly_chart(fig_pie, use_container_width=True)
 
