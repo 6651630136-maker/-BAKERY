@@ -220,6 +220,7 @@ if page == 'Dashboard':
     require_login()
     st.title('Dashboard')
 
+    # Pivot Table
     yearly = (
         historical
         .assign(Year=historical['Date'].dt.year)
@@ -231,16 +232,14 @@ if page == 'Dashboard':
     pivot = pd.pivot_table(yearly, values='Sales', index='Year', columns='ProductName', aggfunc='sum')
     st.dataframe(pivot)
 
+    # Donut Pie
     st.subheader('Product share (Donut Pie)')
     prod = st.selectbox('Select product', yearly['ProductName'].unique())
     pie_data = yearly[yearly['ProductName'] == prod][['Year','Sales']]
-    fig_pie = go.Figure(go.Pie(
-        labels=pie_data['Year'],
-        values=pie_data['Sales'],
-        hole=0.4
-    ))
+    fig_pie = go.Figure(go.Pie(labels=pie_data['Year'], values=pie_data['Sales'], hole=0.4))
     st.plotly_chart(fig_pie, use_container_width=True)
 
+    # Quarterly Chart
     st.subheader('Quarterly Sales Trend')
     quarterly = (
         historical
@@ -249,13 +248,8 @@ if page == 'Dashboard':
         .sum()
         .reset_index()
     )
-    fig_quarter = go.Figure(go.Bar(
-        x=quarterly['Quarter'],
-        y=quarterly['Sales'],
-        name="Quarterly Sales"
-    ))
+    fig_quarter = go.Figure(go.Bar(x=quarterly['Quarter'], y=quarterly['Sales'], name="Quarterly Sales"))
     fig_quarter.update_layout(xaxis_title="Quarter", yaxis_title="Sales")
     st.plotly_chart(fig_quarter, use_container_width=True)
 
     logout()
-    st.stop()
