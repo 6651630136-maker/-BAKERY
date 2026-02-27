@@ -241,9 +241,13 @@ weather_feature = st.sidebar.selectbox(
 start_date = st.sidebar.date_input("Start Date", weather_f['Date'].min())
 end_date = st.sidebar.date_input("End Date", weather_f['Date'].max())
 
+# แปลง date_input เป็น Timestamp ก่อนกรอง
+start_date = pd.to_datetime(start_date)
+end_date = pd.to_datetime(end_date)
+
 filtered_df = weather_f[
-    (weather_f['Date'] >= pd.to_datetime(start_date)) &
-    (weather_f['Date'] <= pd.to_datetime(end_date))
+    (weather_f['Date'] >= start_date) &
+    (weather_f['Date'] <= end_date)
 ]
 
 # --- Tab 2: Weather ---
@@ -253,8 +257,11 @@ with tab2:
     # แสดงข้อมูลที่กรองแล้ว
     st.write(filtered_df)
 
-    # รวมยอดขายรายเดือนจาก hist_f
-    sales_monthly = hist_f.groupby('Date')['Sales'].sum().reset_index()
+    # กรอง sales_monthly ให้ตรงกับช่วงวันที่เดียวกัน
+    sales_monthly = hist_f[
+        (hist_f['Date'] >= start_date) &
+        (hist_f['Date'] <= end_date)
+    ].groupby('Date')['Sales'].sum().reset_index()
 
     fig2 = go.Figure()
     fig2.add_trace(go.Bar(x=sales_monthly['Date'], y=sales_monthly['Sales'], name="Total Sales", opacity=0.6))
