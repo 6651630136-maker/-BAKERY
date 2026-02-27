@@ -110,7 +110,7 @@ def logout():
     if st.sidebar.button('Logout'):
         st.session_state.logged_in = False
         st.session_state.username = ''
-        st.experimental_rerun()
+        st.rerun()   # ใช้ st.rerun() แทน st.experimental_rerun()
 
 
 # require login for dashboard pages
